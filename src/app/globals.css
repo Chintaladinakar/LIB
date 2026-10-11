@@ -1,26 +1,200 @@
-@import "tailwindcss";
+/* Scan only src/ for class names. Without this Tailwind also reads markdown elsewhere in
+   the repo (like .agents/skills) and inlines CSS for classes no page uses. */
+@import "tailwindcss" source("..");
 
+@theme {
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Design tokens. light-dark() picks a value from the element's color-scheme, so the page follows
+   the visitor's setting and .theme-light / .theme-dark pin a preview to one theme. The tokens
+   are declared on those wrappers too: the build compiles light-dark() into variables that
+   resolve where a token is declared, so a token declared only on :root would keep the page's
+   theme. --page and --accent are mirrored in BRAND_COLORS (src/lib/site.ts). Every text
+   pairing meets WCAG AA on --page and --surface in both themes. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light dark;
+}
+
+.theme-light {
+  color-scheme: light;
+}
+
+.theme-dark {
+  color-scheme: dark;
+}
+
+:root,
+.theme-light,
+.theme-dark {
+  --page: light-dark(#eeeef1, #09090b);
+  --surface: light-dark(#fbfbfc, #141417);
+  --surface-hover: light-dark(#f4f4f6, #1c1c21);
+  --subtle: light-dark(#ebebee, #1f1f24);
+  --shell: light-dark(rgb(24 24 27 / 0.045), rgb(255 255 255 / 0.035));
+  --shell-ring: light-dark(rgb(24 24 27 / 0.07), rgb(255 255 255 / 0.08));
+  --highlight: light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.06));
+  --line: light-dark(#dedee3, #26262c);
+  --line-strong: light-dark(#c4c4cb, #3c3c44);
+  --fg: light-dark(#18181b, #f2f2f3);
+  --fg-soft: light-dark(#3f3f46, #d0d0d5);
+  --muted: light-dark(#5b5b64, #a1a1aa);
+  --accent: #2538e4;
+  --accent-hover: light-dark(#1f2fc7, #3446f0);
+  --accent-text: light-dark(#2538e4, #8e97f1);
+  --on-accent: #fafaff;
+  --shadow: light-dark(rgb(24 24 27 / 0.16), rgb(0 0 0 / 0.6));
+}
+
+.theme-light,
+.theme-dark {
+  color: var(--fg);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-subtle: var(--subtle);
+  --color-shell: var(--shell);
+  --color-shell-ring: var(--shell-ring);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-on-accent: var(--on-accent);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --shadow-tile: 0 1px 2px rgb(24 24 27 / 0.05), 0 28px 50px -30px var(--shadow);
 }
 
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Tapped links get their own :active feedback instead of the browser's gray flash. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* No double-tap-to-zoom wait on links and buttons, so taps register immediately. */
+  a,
+  button {
+    touch-action: manipulation;
+  }
+
+  /* An outline rather than a box-shadow ring, so focus stays visible in forced-colors mode. */
+  :focus-visible {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--accent) 25%, transparent);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* 3D tilt. <TiltEffects> writes --rx/--ry (rotation) and --gx/--gy (glare position) on the
+   [data-tilt] element under the mouse and marks it data-tilting. Everything else is here:
+   .tilt-surface rotates, .lift-* layers rise off it, .tilt-glare catches the light. On touch
+   screens and with reduced motion nothing is written, so cards stay flat and crisp. */
+@property --lift {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@layer components {
+  [data-tilt] {
+    perspective: 1200px;
+    transition: --lift 600ms var(--ease-spring);
+  }
+
+  [data-tilting] {
+    --lift: 1;
+  }
+
+  /* A tilt target inside another (a tile inside the home page scene) must not inherit the
+     outer rotation or pointer values, or it turns twice. */
+  [data-tilt] [data-tilt] {
+    --base-rx: 0deg;
+    --base-ry: 0deg;
+    --rx: 0deg;
+    --ry: 0deg;
+    --lift: 0;
+  }
+
+  .tilt-surface {
+    transform-style: preserve-3d;
+    transform: rotateX(calc(var(--base-rx, 0deg) + var(--rx, 0deg)))
+      rotateY(calc(var(--base-ry, 0deg) + var(--ry, 0deg)));
+    transition:
+      transform 900ms var(--ease-spring),
+      scale 200ms var(--ease-spring);
+  }
+
+  /* Follow the pointer closely while it moves; the 900ms above is the settle back to rest. */
+  [data-tilting] > .tilt-surface {
+    transition-duration: 180ms, 200ms;
+  }
+
+  .lift-1 {
+    translate: 0 0 calc(var(--lift) * 18px);
+  }
+  .lift-2 {
+    translate: 0 0 calc(var(--lift) * 40px);
+  }
+  .lift-3 {
+    translate: 0 0 calc(var(--lift) * 64px);
+  }
+
+  .tilt-glare {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      circle at var(--gx, 50%) var(--gy, 50%),
+      rgb(255 255 255 / 0.24),
+      transparent 60%
+    );
+    opacity: 0;
+    transition: opacity 500ms var(--ease-spring);
+  }
+
+  [data-tilting] .tilt-glare {
+    opacity: 1;
+  }
+}
+
+/* Tiles below the fold rise into place as they scroll in. Scroll-driven, so it costs no
+   JavaScript; tiles already on screen at load start in their final state. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) translateY(48px) rotateX(16deg) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .rise-in {
+      animation: rise-in both var(--ease-spring);
+      animation-timeline: view();
+      animation-range: entry 0% entry 75%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
