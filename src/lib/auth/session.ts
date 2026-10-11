@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { auth } from "./server";
+import { getAuth } from "./server";
 
 export type SessionUser = {
   id: string;
@@ -15,7 +15,7 @@ export type SessionUser = {
 export async function getUser(): Promise<SessionUser | null> {
   // Prerendering stops here, so the build never asks for a session that can't exist yet.
   await connection();
-  const { data } = await auth.getSession();
+  const { data } = await getAuth().getSession();
   const user = data?.user;
   if (!user) return null;
   return { id: user.id, email: user.email, name: user.name ?? "" };
