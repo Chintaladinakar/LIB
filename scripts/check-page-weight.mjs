@@ -1,14 +1,14 @@
 // Page-weight budget: fails the build when a change makes the public pages heavier.
 //
-// Reads each page's prerendered HTML from the production build (.next/server/app) and the files
-// it pulls in from .next/static, then measures what a first visit downloads: the HTML (which
+// Reads each page's prerendered HTML from the production build (.next/server) and the files it
+// pulls in from .next/static, then measures what a first visit downloads: the HTML (which
 // includes the inlined CSS), the JavaScript and the preloaded fonts, gzip-compressed. Photos are
 // left out because next/image resizes them per request and they are each creator's own content.
 //
 //   npm run check:weight                compare with page-weight.json; exits 1 if over budget
 //   npm run check:weight -- --update    save the current sizes plus 5% headroom as the budget
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -17,7 +17,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BUDGET_FILE = join(ROOT, "page-weight.json");
 const HEADROOM = 1.05;
 
-// Route -> prerendered file name in .next/server/app.
+// Route -> prerendered file name (see prerenderedHtml).
 const PAGES = { "/": "index", "/demo": "demo", "/sign-in": "sign-in" };
 const KINDS = ["html", "js", "font"];
 
@@ -63,9 +63,24 @@ function headerAssets(metaPath) {
   return assets;
 }
 
+// Where the build put a page's prerendered HTML. A plain `next build` writes
+// .next/server/app/<file>.html. With a build adapter (Vercel enables one through
+// NEXT_ADAPTER_PATH), pages go to .next/server/route-cache/APP_PAGE/<hash>/$/<file>.html.
+function prerenderedHtml(file) {
+  const plain = join(ROOT, ".next", "server", "app", `${file}.html`);
+  if (existsSync(plain)) return plain;
+  const cache = join(ROOT, ".next", "server", "route-cache", "APP_PAGE");
+  if (!existsSync(cache)) return null;
+  for (const key of readdirSync(cache)) {
+    const candidate = join(cache, key, "$", `${file}.html`);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function measure(route, file) {
-  const htmlPath = join(ROOT, ".next", "server", "app", `${file}.html`);
-  if (!existsSync(htmlPath)) throw new Error(`${route}: no prerendered page at ${htmlPath}. Run "next build" first.`);
+  const htmlPath = prerenderedHtml(file);
+  if (!htmlPath) throw new Error(`${route}: no prerendered "${file}.html" in .next/server. Run "next build" first.`);
   const html = readFileSync(htmlPath);
   const sizes = { html: gzipSize(html), js: 0, font: 0 };
   const assets = new Map([...assetsOf(html.toString("utf8")), ...headerAssets(htmlPath.replace(/\.html$/, ".meta"))]);
